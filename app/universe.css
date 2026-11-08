@@ -233,3 +233,49 @@ dialog.chart-modal-backdrop::backdrop { background: rgba(3,9,21,.75); }
  .single-page .product-selection .dock-copy strong { font-size: 13px; }
  .single-page .product-selection .dock-copy small { font-size: 11px; }
 }
+
+.dose-grid .dose-conditional{display:block;font-size:10px;line-height:1.2;color:#b9dcf2;white-space:nowrap}
+.zepbound-price-comparison{font-size:12px;line-height:1.5;color:#b9dcf2}
+
+.price-unit-label{font-size:12px;line-height:1.5;color:#b9dcf2}
+
+/* Keep the selected price and history readable inside the existing warm card. */
+.dose-price-chart .price-title{display:flex;flex-direction:column;gap:8px}
+.dose-price-chart .price-title>span{max-width:none;font-size:11px}
+.dose-price-chart .price-title strong{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px;white-space:normal;font-size:28px;line-height:1.2}
+.dose-price-chart .price-title strong small{font-size:13px;white-space:normal}
+.price-unit-label{font-size:12px;line-height:1.6;margin:12px 0 4px}
+.price-chart-container{width:100%;min-width:0}
+.price-chart-container .explore-price-line{display:block;width:100%;height:auto;max-height:none;margin:8px 0}
+.price-chart-container .price-chart-legend{font-size:11px;gap:8px 12px;line-height:1.5}
+.price-history-note,.price-observation-date,.price-offer-summary{font-size:12px;line-height:1.6}
+.price-methodology{margin-top:14px;border-top:1px solid #b6bdcc;padding-top:12px;color:#535b78;font-size:12px;line-height:1.6}
+.price-methodology summary{cursor:pointer;font-weight:700;color:#b44920}
+.price-methodology summary:focus-visible{outline:2px solid #b44920;outline-offset:4px}
+.price-methodology p{font-size:12px;line-height:1.6}
+.price-methodology .price-sources{display:flex;flex-wrap:wrap;gap:10px 14px}
+.price-methodology a{overflow-wrap:anywhere}
+.chart-modal .price-unit-label,.chart-modal .price-offer-summary{color:#535b78}
+@media(min-width:701px){
+ .single-page .page-explore-section .detail-panel{width:clamp(360px,40vw,620px);padding:24px;max-height:none;overflow:visible}
+ .single-page .page-explore-section{min-height:max(1100px,calc(var(--detail-height,850px) + 340px))}
+ .single-page .page-explore-section .intro{width:32vw}
+ .single-page .page-explore-section .product-selection{width:min(50vw,calc(100% - clamp(360px,40vw,620px) - 9%))}
+}
+@media(max-width:700px){
+ .dose-price-chart{padding:16px 12px;margin:18px -12px 12px;min-width:0}
+ .dose-price-chart .price-title{width:100%}
+ .dose-price-chart .price-title strong{font-size:28px}
+ .dose-price-chart .expand-chart-button{margin-top:10px}
+ .price-chart-container{width:100%}
+ .chart-modal-heading h2 small{display:block;font-size:13px;white-space:normal;line-height:1.5}
+}
+
+.price-event-details{padding-left:18px}
+.price-event-details li{margin:12px 0}
+
+.price-chart-container .chart-hover-card .chart-hover-price{font-size:13px}
+
+/* Price-point details occupy their own space, never the plotting area. */
+.price-chart-container .price-chart-readout{display:flex;flex-direction:column;gap:5px;min-height:110px;margin:8px 0 14px;padding:12px;border:1px solid #d8cec3;border-radius:6px;background:#fffdf9;color:#535b78;font-size:12px;line-height:1.5;overflow-wrap:anywhere;box-sizing:border-box}
+.price-chart-readout strong{color:#202c3d;font-size:13px}

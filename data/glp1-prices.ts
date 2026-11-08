@@ -209,8 +209,10 @@ const regular = "Self-pay with valid on-label prescription";
 
 const journey = "Self-pay; first purchase, then refill within 45 days of prior delivery";
 
-export const PRICE_OBSERVED_ON = "2026-10-05";
-const observedOn = PRICE_OBSERVED_ON;
+export const PRICE_OBSERVED_ON = "2026-11-08";
+export const PRICE_VERIFICATION_LABEL = "Prices verified November 8, 2026";
+// Preserve the original observations; verification is a separate snapshot, not a cut.
+const observedOn = "2026-10-05";
 
 const wegovyDoses = ["0.25 mg", "0.5 mg", "1 mg", "1.7 mg", "2.4 mg"];
 
@@ -279,7 +281,7 @@ add({ date: observedOn, product: "Wegovy pill", form: "Tablet", doses: ["4 mg"],
 
 add({ date: observedOn, product: "Wegovy", form: "Pen", doses: wegovyDoses, usd: 349, days: 28, channel: N, eligibility: "Eligible self-pay patient", priceBasis: "regular", event: "Current observation", status: "observed", sourceUrl: source.novoCurrent });
 
-add({ date: observedOn, product: "Wegovy", form: "Pen", doses: ["0.25 mg", "0.5 mg"], usd: 199, days: 28, channel: N, eligibility: "New eligible self-pay patient; first two monthly fills", priceBasis: "introductory", event: "Current observation", status: "observed", sourceUrl: source.novoCurrent });
+add({ date: observedOn, product: "Wegovy", form: "Pen", doses: ["0.25 mg", "0.5 mg"], usd: 199, days: 28, channel: N, eligibility: "New eligible self-pay patient; $199 for the first two eligible low-dose fills (0.25 mg or 0.5 mg), then $349 per 28-day supply. The introductory price is not the ongoing treatment price; offer expires December 31, 2026", effectiveUntil: "2026-12-31", priceBasis: "introductory", event: "Current observation", status: "observed", sourceUrl: source.novoCurrent });
 
 add({ date: observedOn, product: "Wegovy HD", form: "Pen", doses: ["7.2 mg"], usd: 399, days: 28, channel: N, eligibility: "Eligible self-pay patient", priceBasis: "regular", event: "Current observation", status: "observed", sourceUrl: source.novoCurrent });
 
@@ -293,19 +295,44 @@ add({ date: "2026-04-01", product: "Foundayo", form: "Tablet", doses: ["0.8 mg"]
 
 for (const [dose, usd] of [["0.8 mg", 149], ["2.5 mg", 199], ["5.5 mg", 299], ["9 mg", 299], ["14.5 mg", 349], ["17.2 mg", 349]] as const) add({ date: observedOn, product: "Foundayo", form: "Tablet", doses: [dose], usd, days: 30, channel: Z, eligibility: regular, priceBasis: "regular", event: "Current observation", status: "observed", sourceUrl: source.foundayoCurrent });
 
-for (const [dose, usd] of [["2.5 mg", 149], ["5.5 mg", 199]] as const) add({ date: observedOn, product: "Foundayo", form: "Tablet", doses: [dose], usd, days: 30, channel: Z, eligibility: "Eligible self-pay; temporary offer through 2026-12-31", priceBasis: "temporary", event: "Current observation", status: "observed", sourceUrl: source.foundayoCurrent });
+for (const [dose, usd] of [["2.5 mg", 149], ["5.5 mg", 199]] as const) add({ date: observedOn, product: "Foundayo", form: "Tablet", doses: [dose], usd, days: 30, channel: Z, eligibility: "Eligible self-pay; temporary offer expires December 31, 2026", effectiveUntil: "2026-12-31", priceBasis: "temporary", event: "Current observation", status: "observed", sourceUrl: source.foundayoCurrent });
 
 add({ date: observedOn, product: "Foundayo", form: "Tablet", doses: ["14.5 mg", "17.2 mg"], usd: 299, days: 30, channel: Z, eligibility: journey, priceBasis: "conditional", event: "Current purchase offer observed", status: "observed", sourceUrl: source.foundayoCurrent, seriesKey: "foundayo-journey", note: "Observation date; not a dated price change." });
 
 
 
+// User-supplied manufacturer verification, checked November 8, 2026.
+// Key every current offer by product, device, dose, channel and price basis.
+export function latestObservations(points: PricePoint[]): PricePoint[] {
+  const latest = new Map<string, PricePoint>();
+  for (const point of points.filter(point => point.status === "observed")) {
+    const key = [point.product, point.form, point.dose, point.channel, point.priceBasis].join("|");
+    const previous = latest.get(key);
+    if (!previous || point.date > previous.date) latest.set(key, point);
+  }
+  return [...latest.values()];
+}
+
+for (const point of latestObservations(rows)) {
+  const lilly = point.product === "Zepbound";
+  add({ ...point, date: PRICE_OBSERVED_ON, doses: [point.dose], days: point.periodDays,
+    status: "observed", event: "Price verified — unchanged",
+    sourceUrl: point.product === "Foundayo" ? "https://foundayo.lilly.com/coverage-savings" : point.sourceUrl,
+    eligibility: point.priceBasis === "conditional"
+      ? "Self-pay; first purchase, then refill within 45 days of prior delivery/receipt"
+      : lilly ? `${point.eligibility}; needles/syringes may require a separate purchase` : point.eligibility,
+    note: "Manufacturer snapshot verified November 8, 2026. No new November price change established. Regular prices are not guaranteed after an offer or program expires.",
+    ...(["introductory", "temporary"].includes(point.priceBasis) ? { effectiveUntil: "2026-12-31" } : {}),
+  });
+}
+
 export const pricePoints = rows;
 
 export const regularStoryPoints = rows.filter((point) => point.status === "available" && point.priceBasis === "regular");
 
-export const offerPoints = rows.filter((point) => point.status === "available" && ["introductory", "conditional", "temporary"].includes(point.priceBasis));
+export const currentPrices = latestObservations(rows);
 
-export const currentPrices = rows.filter((point) => point.status === "observed");
+export const offerPoints = currentPrices.filter(point => point.priceBasis !== "regular");
 
 export const policyEvents = [{
 
@@ -363,373 +390,20 @@ export function formatPrice(point: PricePoint) {
 
 
 
-// Chart events supplied separately from current dose-button pricing.
-
+// A current manufacturer page does not establish an April launch-price date
+// or a September temporary-price change. Keep only the sourced announcement
+// and actual October/November observations; never draw those offers as steps.
 export const foundayoChartPoints: PricePoint[] = [
-
-  {
-
-    "id": "foundayo-chart-0",
-
-    "date": "2026-04-01",
-
-    "product": "Foundayo",
-
-    "form": "Tablet",
-
-    "dose": "All doses",
-
-    "usd": 149,
-
-    "periodDays": 30,
-
-    "unit": "USD / 30 days",
-
-    "channel": "LillyDirect",
-
-    "eligibility": "Self-pay",
-
-    "priceBasis": "regular",
-
-    "event": "Approval and price announcement \u00b7 starting at $149",
-
-    "status": "announced",
-
-    "sourceUrl": "https://investor.lilly.com/news-releases/news-release-details/fda-approves-lillys-foundayotm-orforglipron-only-glp-1-pill"
-
-  },
-
-  {
-
-    "id": "foundayo-chart-1",
-
-    "date": "2026-04-06",
-
-    "product": "Foundayo",
-
-    "form": "Tablet",
-
-    "dose": "0.8 mg",
-
-    "usd": 149,
-
-    "periodDays": 30,
-
-    "unit": "USD / 30 days",
-
-    "channel": "LillyDirect",
-
-    "eligibility": "Self-pay",
-
-    "priceBasis": "regular",
-
-    "event": "Commercial availability",
-
-    "status": "available",
-
-    "sourceUrl": "https://foundayo.lilly.com/hcp/savings-coverage"
-
-  },
-
-  {
-
-    "id": "foundayo-chart-2",
-
-    "date": "2026-04-06",
-
-    "product": "Foundayo",
-
-    "form": "Tablet",
-
-    "dose": "2.5 mg",
-
-    "usd": 199,
-
-    "periodDays": 30,
-
-    "unit": "USD / 30 days",
-
-    "channel": "LillyDirect",
-
-    "eligibility": "Self-pay",
-
-    "priceBasis": "regular",
-
-    "event": "Commercial availability",
-
-    "status": "available",
-
-    "sourceUrl": "https://foundayo.lilly.com/hcp/savings-coverage"
-
-  },
-
-  {
-
-    "id": "foundayo-chart-3",
-
-    "date": "2026-04-06",
-
-    "product": "Foundayo",
-
-    "form": "Tablet",
-
-    "dose": "5.5 mg",
-
-    "usd": 299,
-
-    "periodDays": 30,
-
-    "unit": "USD / 30 days",
-
-    "channel": "LillyDirect",
-
-    "eligibility": "Self-pay",
-
-    "priceBasis": "regular",
-
-    "event": "Commercial availability",
-
-    "status": "available",
-
-    "sourceUrl": "https://foundayo.lilly.com/hcp/savings-coverage"
-
-  },
-
-  {
-
-    "id": "foundayo-chart-4",
-
-    "date": "2026-04-06",
-
-    "product": "Foundayo",
-
-    "form": "Tablet",
-
-    "dose": "9 mg",
-
-    "usd": 299,
-
-    "periodDays": 30,
-
-    "unit": "USD / 30 days",
-
-    "channel": "LillyDirect",
-
-    "eligibility": "Self-pay",
-
-    "priceBasis": "regular",
-
-    "event": "Commercial availability",
-
-    "status": "available",
-
-    "sourceUrl": "https://foundayo.lilly.com/hcp/savings-coverage"
-
-  },
-
-  {
-
-    "id": "foundayo-chart-5",
-
-    "date": "2026-04-06",
-
-    "product": "Foundayo",
-
-    "form": "Tablet",
-
-    "dose": "14.5 mg",
-
-    "usd": 349,
-
-    "periodDays": 30,
-
-    "unit": "USD / 30 days",
-
-    "channel": "LillyDirect",
-
-    "eligibility": "Self-pay",
-
-    "priceBasis": "regular",
-
-    "event": "Commercial availability",
-
-    "status": "available",
-
-    "sourceUrl": "https://foundayo.lilly.com/hcp/savings-coverage"
-
-  },
-
-  {
-
-    "id": "foundayo-chart-6",
-
-    "date": "2026-04-06",
-
-    "product": "Foundayo",
-
-    "form": "Tablet",
-
-    "dose": "14.5 mg",
-
-    "usd": 299,
-
-    "periodDays": 30,
-
-    "unit": "USD / 30 days",
-
-    "channel": "LillyDirect",
-
-    "eligibility": "Offer eligibility applies",
-
-    "priceBasis": "conditional",
-
-    "event": "Commercial availability",
-
-    "status": "available",
-
-    "sourceUrl": "https://foundayo.lilly.com/hcp/savings-coverage"
-
-  },
-
-  {
-
-    "id": "foundayo-chart-7",
-
-    "date": "2026-04-06",
-
-    "product": "Foundayo",
-
-    "form": "Tablet",
-
-    "dose": "17.2 mg",
-
-    "usd": 349,
-
-    "periodDays": 30,
-
-    "unit": "USD / 30 days",
-
-    "channel": "LillyDirect",
-
-    "eligibility": "Self-pay",
-
-    "priceBasis": "regular",
-
-    "event": "Commercial availability",
-
-    "status": "available",
-
-    "sourceUrl": "https://foundayo.lilly.com/hcp/savings-coverage"
-
-  },
-
-  {
-
-    "id": "foundayo-chart-8",
-
-    "date": "2026-04-06",
-
-    "product": "Foundayo",
-
-    "form": "Tablet",
-
-    "dose": "17.2 mg",
-
-    "usd": 299,
-
-    "periodDays": 30,
-
-    "unit": "USD / 30 days",
-
-    "channel": "LillyDirect",
-
-    "eligibility": "Offer eligibility applies",
-
-    "priceBasis": "conditional",
-
-    "event": "Commercial availability",
-
-    "status": "available",
-
-    "sourceUrl": "https://foundayo.lilly.com/hcp/savings-coverage"
-
-  },
-
-  {
-
-    "id": "foundayo-chart-9",
-
-    "date": "2026-09-01",
-
-    "product": "Foundayo",
-
-    "form": "Tablet",
-
-    "dose": "2.5 mg",
-
-    "usd": 149,
-
-    "periodDays": 30,
-
-    "unit": "USD / 30 days",
-
-    "channel": "LillyDirect",
-
-    "eligibility": "Offer eligibility applies",
-
-    "priceBasis": "temporary",
-
-    "event": "Temporary price reduction",
-
-    "status": "available",
-
-    "sourceUrl": "https://foundayo.lilly.com/hcp/savings-coverage"
-
-  },
-
-  {
-
-    "id": "foundayo-chart-10",
-
-    "date": "2026-09-01",
-
-    "product": "Foundayo",
-
-    "form": "Tablet",
-
-    "dose": "5.5 mg",
-
-    "usd": 199,
-
-    "periodDays": 30,
-
-    "unit": "USD / 30 days",
-
-    "channel": "LillyDirect",
-
-    "eligibility": "Offer eligibility applies",
-
-    "priceBasis": "temporary",
-
-    "event": "Temporary price reduction",
-
-    "status": "available",
-
-    "sourceUrl": "https://foundayo.lilly.com/hcp/savings-coverage"
-
-  }
-
+  { ...rows.find(point => point.product === "Foundayo" && point.status === "announced")!,
+    id: "foundayo-launch-announcement", dose: "All doses", displayMode: "marker" },
+  ...rows.filter(point => point.product === "Foundayo" && point.status === "observed")
+    .map(point => ({ ...point, displayMode: "marker" as const,
+      note: `${point.note ?? "Observed manufacturer offer."} Historical offer start/change date unverified.` })),
 ];
 
-
-
 export function getFoundayoChartPoints(dose: string) {
-
   return foundayoChartPoints.filter(point => point.dose === `${dose} mg` || point.dose === "All doses");
-
 }
-
-
 
 const basisLabel: Record<PriceBasis, string> = {
 
@@ -858,7 +532,7 @@ export function getExplorePrice(product: string, dose: string, form: string) {
 
   const current = matches.filter((point) => point.status === "observed" && point.priceBasis === "regular").sort((a, b) => chronological(b, a))[0];
 
-  const offers = matches.filter((point) => point.status === "observed" && point.priceBasis !== "regular");
+  const offers = latestObservations(matches).filter((point) => point.priceBasis !== "regular");
 
   const latest = current ?? history.at(-1);
 
@@ -882,13 +556,13 @@ export function getExplorePrice(product: string, dose: string, form: string) {
 
             : [point.product, point.form, point.dose, point.priceBasis].join("|"),
 
-        displayMode: point.status === "announced" || point.priceBasis === "temporary" ? "marker" as const : "series" as const,
+        displayMode: "marker" as const,
 
       }))
 
     : [];
 
-  const chartSeries = buildChartSeries([...matches, ...chartEvents]);
+  const chartSeries = buildChartSeries(product === "Foundayo" ? chartEvents : matches);
 
 
 
@@ -896,7 +570,9 @@ export function getExplorePrice(product: string, dose: string, form: string) {
 
     headline: `$${latest.usd}`,
 
-    detail: `${latest.eligibility}.${current ? ` Current price observed on ${current.date}; this is not a dated price change.` : ""}${offers.length ? ` Other current offer${offers.length > 1 ? "s" : ""}: ${offers.map((offer) => offer.priceBasis === "conditional" ? `$${offer.usd} (conditional offer)` : `$${offer.usd} (${basisLabel[offer.priceBasis].toLowerCase()}; ${offer.eligibility})`).join("; ")}.` : ""}${productOfferAnnotations.length ? ` Product-level introductory offer history (not dose-specific regular prices): ${productOfferAnnotations.map((offer) => `$${offer.usd} on ${offer.date}`).join("; ")}.` : ""}`,
+    conditionalOffer: offers.find((offer) => offer.priceBasis === "conditional"),
+
+    detail: `${latest.eligibility}.${current ? ` Current price observed on ${current.date}; this is not a dated price change.` : ""}${offers.length ? ` Other current offer${offers.length > 1 ? "s" : ""}: ${offers.map((offer) => offer.priceBasis === "conditional" ? `$${offer.usd} (conditional offer; ${offer.eligibility})` : `$${offer.usd} (${basisLabel[offer.priceBasis].toLowerCase()}; ${offer.eligibility})`).join("; ")}.` : ""}${productOfferAnnotations.length ? ` Product-level introductory offer history (not dose-specific regular prices): ${productOfferAnnotations.map((offer) => `$${offer.usd} on ${offer.date}`).join("; ")}.` : ""}`,
 
     chartSeries,
 
@@ -904,7 +580,7 @@ export function getExplorePrice(product: string, dose: string, form: string) {
 
     source: latest.sourceUrl,
 
-    offerSources: offers.map((offer) => ({ label: `${basisLabel[offer.priceBasis]} ↗`, source: offer.sourceUrl })),
+    offerSources: [...offers.map((offer) => ({ label: `${basisLabel[offer.priceBasis]} ↗`, source: offer.sourceUrl })), ...(product === "Zepbound" ? [{ label: "Savings terms ↗", source: "https://zepbound.lilly.com/savings" }] : [])],
 
     basis: latest.priceBasis,
 

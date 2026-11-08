@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, Expand, RotateCcw, X } from "lucide-react";
 import dynamic from "next/dynamic";
 const UniverseScene = dynamic(() => import("./universe-scene"), { ssr: false });
@@ -22,10 +22,22 @@ const drugs:Drug[] = [
 
 function ExplorePriceLineChart({ chartSeries, color, expanded = false }: { chartSeries: ChartSeries[]; color: string; expanded?: boolean }) {
  const [hoveredPoint,setHoveredPoint]=useState<ChartPoint|null>(null);
+ const [pinnedPoint,setPinnedPoint]=useState<ChartPoint|null>(null);
+ const activePoint=hoveredPoint??pinnedPoint;
+ const gridMaskId=useId();
+ const chartRef=useRef<HTMLDivElement>(null);
+ const [width,setWidth]=useState(420);
+ useEffect(()=>{
+  const element=chartRef.current;
+  if(!element)return;
+  const observer=new ResizeObserver(([entry])=>setWidth(Math.max(240,entry.contentRect.width)));
+  observer.observe(element);
+  return()=>observer.disconnect();
+ },[]);
  const isPriceOrOfferPoint=(point:ChartPoint)=>point.status!=="announced"&&point.event!=="Channel expansion";
  const allPoints = chartSeries.flatMap(series => series.points).filter(isPriceOrOfferPoint);
  if (allPoints.length === 0) return <p className="price-chart-empty">No dated regular-price changes are available for this dose.</p>;
- const width=900, height=expanded?410:220, left=76, right=28, top=30, bottom=expanded?58:48;
+ const height=expanded?410:300, left=48, right=24, top=36, bottom=48;
  const eventAxisInset=24;
  const chartLeft=left+eventAxisInset, chartRight=width-right-eventAxisInset;
  const chartWidth=chartRight-chartLeft;
@@ -39,8 +51,8 @@ function ExplorePriceLineChart({ chartSeries, color, expanded = false }: { chart
  const values=allPoints.map(point=>point.value);
  const yAxisMax=Math.max(200,Math.ceil(Math.max(...values)/200)*200);
  const y=(value:number)=>top+((yAxisMax-value)/yAxisMax)*(height-top-bottom);
- const axisLabelStyle={ fontSize:"clamp(14px, 1vw, 16px)", fontWeight:600, fontFamily:"'Montserrat', Arial, sans-serif", fill:"#59617f" } as const;
- const pointLabelStyle={ fontSize:"clamp(15px, 1.08vw, 16px)", fontWeight:600, fontFamily:"'Montserrat', Arial, sans-serif", fill:"#1d283d" } as const;
+ const axisLabelStyle={ fontSize:12, fontWeight:600, fontFamily:"'Montserrat', Arial, sans-serif", fill:"#59617f" } as const;
+ const pointLabelStyle={ fontSize:13, fontWeight:600, fontFamily:"'Montserrat', Arial, sans-serif", fill:"#1d283d" } as const;
  const formatMonthYear=(date:string)=>new Intl.DateTimeFormat("en-US",{month:"short",year:"numeric",timeZone:"UTC"}).format(new Date(`${date}T00:00:00Z`));
  const regularObservationDates=allPoints.filter(point=>point.status==="observed"&&point.basis==="regular").map(point=>point.date).sort();
  const finalObservationDate=regularObservationDates.at(-1);
@@ -54,73 +66,112 @@ function ExplorePriceLineChart({ chartSeries, color, expanded = false }: { chart
    const monthKey=date.slice(0,7);
    if(!visibleTicksByMonth.has(monthKey)||date===finalObservationDate)visibleTicksByMonth.set(monthKey,date);
  }
- const visibleTickDates=[...visibleTicksByMonth.values()].sort((a,b)=>a.localeCompare(b));
- return <>
+ const candidateTicks=[...visibleTicksByMonth.values()].sort((a,b)=>a.localeCompare(b));
+ // Greedily retain readable ticks, always reserving room for the endpoint.
+ const visibleTickDates:string[]=[];
+ for(const date of candidateTicks){
+  const previous=visibleTickDates.at(-1);
+  const endpoint=candidateTicks.at(-1)!;
+  if(date===endpoint){
+   if(previous&&xForDate(date)-xForDate(previous)<76)visibleTickDates.pop();
+   visibleTickDates.push(date);
+  }else if((!previous||xForDate(date)-xForDate(previous)>=76)&&xForDate(endpoint)-xForDate(date)>=76)visibleTickDates.push(date);
+ }
+ const priceLabels=new Map<string,{x:number;bottom:number;width:number}>();
+ for(const series of chartSeries){
+  const points=series.points.filter(isPriceOrOfferPoint).slice().sort((a,b)=>a.date.localeCompare(b.date));
+  points.forEach((point,index)=>{
+   // Verification dots remain interactive, but never repeat an established price.
+   if(index>0&&points[index-1].value===point.value)return;
+   const labelWidth=`$${point.value}`.length*9;
+   const incomingDrop=index>0&&points[index-1].value!==point.value&&point.status!=="observed";
+   const labelX=Math.min(width-right-labelWidth,xForDate(point.date)+(incomingDrop?12:-labelWidth/2));
+   priceLabels.set(point.id,{x:labelX,bottom:y(point.value)-(point.displayMode==="marker"?6:4.5)-14,width:labelWidth});
+  });
+ }
+ return <div ref={chartRef} className="price-chart-container">
  <svg className="explore-price-line" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Price history line chart">
-  {Array.from({length:yAxisMax/200+1},(_,row)=>{const value=yAxisMax-row*200;return <g key={value}><line x1={left} y1={y(value)} x2={width-right} y2={y(value)}/><text x={left-12} y={y(value)+4} textAnchor="end" style={axisLabelStyle}>${value}</text></g>})}
+  <defs><mask id={gridMaskId} maskUnits="userSpaceOnUse" x="0" y="0" width={width} height={height}><rect width={width} height={height} fill="white"/>{[...priceLabels.entries()].map(([id,label])=><rect key={id} x={label.x-4} y={label.bottom-19} width={label.width+8} height="23" fill="black"/>)}</mask></defs>
+  {Array.from({length:yAxisMax/200+1},(_,row)=>{const value=yAxisMax-row*200;return <g key={value}><line x1={left} y1={y(value)} x2={width-right} y2={y(value)} mask={`url(#${gridMaskId})`}/><text x={left-12} y={y(value)+4} textAnchor="end" style={axisLabelStyle}>${value}</text></g>})}
   {chartSeries.map(series => {
     const basis = series.basis.toLowerCase();
     const dash = basis === "conditional" ? "8 6" : basis === "introductory" || basis === "temporary" ? "3 5" : undefined;
     const visiblePoints=series.points.filter(isPriceOrOfferPoint);
     const sortedPoints=visiblePoints.filter(point=>point.displayMode!=="marker").slice().sort((a,b)=>a.date.localeCompare(b.date));
-    const paths:string[]=[];
-    let last:typeof sortedPoints[number]|undefined;
-    for(const point of sortedPoints){
-      if(point.status === "observed" && last && point.value !== last.value){last=undefined;continue;}
-      if(!last)paths.push(`M ${xForDate(point.date)} ${y(point.value)}`);
-      else paths[paths.length-1]+=` H ${xForDate(point.date)} V ${y(point.value)}`;
-      last=point;
+    const segments:{path:string;schematic:boolean}[]=[];
+    for(let index=1;index<sortedPoints.length;index++){
+      const previous=sortedPoints[index-1],point=sortedPoints[index];
+      if(point.status==="observed"&&point.value!==previous.value)continue;
+      segments.push({path:`M ${xForDate(previous.date)} ${y(previous.value)} H ${xForDate(point.date)}`,schematic:!!previous.dateLabel});
+      if(point.value!==previous.value)segments.push({path:`M ${xForDate(point.date)} ${y(previous.value)} V ${y(point.value)}`,schematic:false});
     }
     return <g key={series.key}>
-      {series.showLine && paths.map((path,index)=><path key={index} d={path} fill="none" stroke={color} strokeDasharray={dash} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />)}
+      {series.showLine&&segments.map((segment,index)=><path key={index} d={segment.path} fill="none" stroke={color} strokeDasharray={segment.schematic?"5 4":dash} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />)}
       {visiblePoints.map((point,index)=>{
         const pointX=xForDate(point.date);
-        const pointY=y(point.value);
-        const priceLabelY=point.basis==="conditional"||point.basis==="temporary"||point.basis==="introductory"
-          ? pointY+18
-          : point.announcement?pointY-22:pointY-10;
+        const label=priceLabels.get(point.id);
         const tooltip=[
           point.dateLabel ?? point.date,
-          `$${point.value} / ${point.periodDays} days`,
+          `$${point.value} USD / ${point.periodDays}-day supply`,
           `Basis: ${point.basis}`,
-          `Status: ${point.status}`,
+          `Status: ${point.status === "observed" ? "Observed snapshot; not a dated price cut" : point.status}`,
           `Event: ${point.event}`,
           `Channel: ${point.channel}`,
+          `Eligibility: ${point.eligibility}`,
           point.note,
           point.effectiveUntil ? `Effective until: ${point.effectiveUntil}` : undefined,
           `Source: ${point.sourceUrl}`,
         ].filter(Boolean).join("\n");
         return <g key={`${point.id}-${index}`} onMouseEnter={()=>setHoveredPoint(point)} onMouseLeave={()=>setHoveredPoint(null)}>
-          <circle cx={pointX} cy={y(point.value)} r={point.displayMode==="marker"?"6":"4.5"} fill={point.announcement||point.displayMode==="marker"?"white":color} stroke={color} tabIndex={0} role="img" aria-label={tooltip} onFocus={()=>setHoveredPoint(point)} onBlur={()=>setHoveredPoint(null)}><title>{tooltip}</title></circle>
-          {point.displayMode!=="marker"&&<text className="price-chart-value" x={pointX} y={priceLabelY} textAnchor="middle" style={pointLabelStyle}>{point.announcement?"From ":""}${point.value}</text>}
+          <circle cx={pointX} cy={y(point.value)} r={point.displayMode==="marker"?"6":"4.5"} fill={point.announcement||point.displayMode==="marker"?"white":color} stroke={color} tabIndex={0} role="button" aria-label={tooltip} onClick={()=>setPinnedPoint(previous=>previous?.id===point.id?null:point)} onKeyDown={event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();setPinnedPoint(previous=>previous?.id===point.id?null:point);}if(event.key==="Escape"){setPinnedPoint(null);setHoveredPoint(null);}}} onFocus={()=>setHoveredPoint(point)} onBlur={()=>setHoveredPoint(null)}><title>{tooltip}</title></circle>
+          {label&&<text className="price-chart-value" x={label.x} y={label.bottom} dominantBaseline="text-after-edge" textAnchor="start" style={pointLabelStyle}>${point.value}</text>}
         </g>;
       })}
     </g>;
   })}
   {visibleTickDates.map(date=>{const tickX=xForDate(date);return <g key={date}><line x1={tickX} y1={height-bottom+3} x2={tickX} y2={height-bottom+8} stroke="#7b8298"/><text className="price-chart-date" x={tickX} y={height-10} textAnchor="middle" style={axisLabelStyle}>{allPoints.some(point => point.date === date && point.dateLabel) ? "Prior offer*" : formatMonthYear(date)}</text></g>})}
-  {hoveredPoint&&(()=>{
-    const tipWidth=292, tipHeight=108, pointX=xForDate(hoveredPoint.date), pointY=y(hoveredPoint.value);
-    const tipX=Math.max(left,Math.min(pointX-tipWidth/2,width-right-tipWidth));
-    const tipY=pointY>top+tipHeight+12?pointY-tipHeight-12:top+6;
-    const basisText=hoveredPoint.basis[0].toUpperCase()+hoveredPoint.basis.slice(1);
-    const eventText=`${basisText} · ${hoveredPoint.event}`.slice(0,44);
-    const channelText=`${hoveredPoint.status[0].toUpperCase()+hoveredPoint.status.slice(1)} · ${hoveredPoint.channel}`.slice(0,44);
-    return <g className="chart-hover-card" pointerEvents="none">
-      <rect x={tipX} y={tipY} width={tipWidth} height={tipHeight} rx="8"/>
-      <text x={tipX+13} y={tipY+22} className="chart-hover-date">{hoveredPoint.dateLabel ? "Prior offer · date unverified" : hoveredPoint.date}</text>
-      <text x={tipX+13} y={tipY+45} className="chart-hover-price">${hoveredPoint.value} / {hoveredPoint.periodDays} days</text>
-      <text x={tipX+13} y={tipY+65} className="chart-hover-detail">{eventText}</text>
-      <text x={tipX+13} y={tipY+83} className="chart-hover-detail">{channelText}</text>
-      {hoveredPoint.note&&<text x={tipX+13} y={tipY+101} className="chart-hover-detail">{hoveredPoint.note.length>43?`${hoveredPoint.note.slice(0,40)}…`:hoveredPoint.note}</text>}
-    </g>;
-  })()}
  </svg>
- {allPoints.some(point=>point.dateLabel)&&<p className="price-date-note">*Prior retail savings offer: start date unverified. The plotted baseline is schematic and uses a different channel from the March 2025 NovoCare Pharmacy launch.</p>}
- <div className="price-chart-legend" aria-label="Chart legend">
-   <span><i className="legend-line legend-line-regular" style={{"--legend-color":color} as React.CSSProperties}/>Regular price</span>
-   <span><i className="legend-line legend-line-conditional" style={{"--legend-color":color} as React.CSSProperties}/>Conditional offer</span>
-  <span><i className="legend-marker" style={{"--legend-color":color} as React.CSSProperties}/>Introductory / temporary offer</span>
+ <div className="price-chart-readout" aria-live="polite">
+  {activePoint ? <>
+   <strong>{activePoint.dateLabel ? "Prior offer · date unverified" : formatMonthYear(activePoint.date)} · ${activePoint.value} USD / {activePoint.periodDays}-day supply</strong>
+   <span>{activePoint.dateLabel ?? activePoint.date} · {activePoint.basis} · {activePoint.status === "observed" ? "Observed snapshot; not a dated price cut" : activePoint.event}</span>
+   <span>{activePoint.channel} · {activePoint.eligibility}</span>
+   {activePoint.note&&<span>{activePoint.note}</span>}
+   {activePoint.effectiveUntil&&<span>Offer expires {activePoint.effectiveUntil}.</span>}
+  </> : <span>Hover or focus a price point to see its date, offer and eligibility here.</span>}
  </div>
+ <div className="price-chart-legend" aria-label="Chart legend">
+   {allPoints.some(point=>point.basis==="regular")&&<span><i className="legend-line legend-line-regular" style={{"--legend-color":color} as React.CSSProperties}/>Regular price</span>}
+   {allPoints.some(point=>point.basis==="conditional")&&<span><i className="legend-line legend-line-conditional" style={{"--legend-color":color} as React.CSSProperties}/>Conditional offer</span>}
+  {allPoints.some(point=>point.basis==="introductory"||point.basis==="temporary")&&<span><i className="legend-marker" style={{"--legend-color":color} as React.CSSProperties}/>Introductory / temporary offer</span>}
+ </div>
+ </div>;
+}
+
+type ExplorePrice = NonNullable<ReturnType<typeof getExplorePrice>>;
+
+function PriceHistoryContent({price, productId, dose, device, color, expanded=false}: {
+ price:ExplorePrice; productId:string; dose:string; device:string; color:string; expanded?:boolean;
+}) {
+ const introductory=productId==="wegovy"&&(dose==="0.25"||dose==="0.5");
+ const sources=[...new Set([price.source,...price.offerSources.map(offer=>offer.source),...price.series.map(point=>point.sourceUrl)])];
+ return <>
+  <p className="price-unit-label">U.S. dollars (USD) · {price.periodDays}-day supply · {dose} mg · {device}</p>
+  <ExplorePriceLineChart chartSeries={price.chartSeries} color={color} expanded={expanded}/>
+  {introductory&&<p className="price-offer-summary"><strong>$199 for the first two eligible low-dose fills, then $349.</strong> The introductory price is not the ongoing treatment price. Eligible 0.25 mg and 0.5 mg fills only; offer expires December 31, 2026.</p>}
+  {productId==="zepbound"&&price.conditionalOffer&&<p className="price-offer-summary"><strong>{price.headline} regular · ${price.conditionalOffer.usd} conditional.</strong> Journey offer: first purchase, then refill within 45 days of prior delivery/receipt. Needles/syringes may require a separate purchase.</p>}
+  {productId==="foundayo"&&price.series.some(point=>point.status==="observed"&&point.basis==="temporary")&&<p className="price-offer-summary">Temporary offer expires December 31, 2026; eligibility applies.</p>}
+  <p className="price-history-note">Manufacturer self-pay offers; eligibility applies. Snapshots are observations, not dated price cuts. Regular prices are not guaranteed after offers expire.</p>
+  {price.lastObserved&&<p className="price-observation-date">Prices verified {new Intl.DateTimeFormat("en-US",{month:"long",day:"numeric",year:"numeric",timeZone:"UTC"}).format(new Date(`${price.lastObserved}T00:00:00Z`))}.</p>}
+  <details className="price-methodology">
+   <summary>Sources and methodology</summary>
+   <p>{price.detail}</p>
+   <p>Each history is specific to this product, dose and device. Injections use 28-day supplies; tablets use 30-day supplies. These are manufacturer self-pay offers, not list or net prices, and are not clinical equivalents. Event spacing is schematic. Lines connect documented regular or conditional prices; isolated markers show offers or snapshots whose change date is unknown.</p>
+   {price.series.some(point=>point.dateLabel)&&<p>*Prior retail savings offer: start date unverified. The plotted baseline is schematic and uses a different channel from the March 2025 NovoCare Pharmacy launch.</p>}
+   {productId==="foundayo"&&<p>The chart omits non-price announcements. Available and observed prices and offers are shown separately.</p>}
+   <ul className="price-event-details">{price.series.map(point=><li key={point.id}><strong>{point.dateLabel??point.date} · ${point.value} USD · {point.basis}</strong><br/>{point.status==="observed"?"Observed snapshot; not a dated price cut":point.event}. {point.channel}. {point.eligibility}{point.note&&<> · {point.note}</>}{point.effectiveUntil&&<> · Offer expires {point.effectiveUntil}</>}</li>)}</ul>
+   <div className="price-sources">{sources.map((source,index)=><a key={source} href={source} target="_blank" rel="noreferrer">{index===0?"Current price source":`Historical / offer source ${index}`} ↗</a>)}</div>
+  </details>
  </>;
 }
 
@@ -139,6 +190,7 @@ export default function Page(){
  const [detailHeight,setDetailHeight]=useState<number>();
  const item=drugs.find(d=>d.id===selected)!;
  const displayedPrice=getExplorePrice(item.name,dose||item.doses[item.doses.length-1],item.model==="vial"?"Vial":item.model==="bottle"?"Tablet":"Pen");
+ const priceDevice=item.model==="vial"?"Vial":item.model==="bottle"?"Tablet":"Single-dose pen";
  const selectedAccent=item.id==="wegovy"&&dose==="2.4"?"#b9c6cf":productDoseColor(item.id,dose||undefined,item.accent);
  const choose=(id:string)=>{const d=drugs.find(x=>x.id===id)!;setSelected(id);setDose(d.doses[d.doses.length-1]);};
  useEffect(()=>{
@@ -152,7 +204,7 @@ export default function Page(){
  },[chartExpanded]);
  const navigate=(section: "policy" | "universe" | "compare")=>{document.getElementById(section)?.scrollIntoView({behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth",block:"start"});};
  useEffect(()=>{
-  const panel=detailPanelRef.current,legend=panel?.querySelector<HTMLElement>(".price-chart-legend");
+  const panel=detailPanelRef.current,legend=panel?.querySelector<HTMLElement>(".dose-price-chart");
   if(!panel||!legend)return;
   const measure=()=>setDetailHeight(Math.max(510, Math.ceil(legend.getBoundingClientRect().bottom-panel.getBoundingClientRect().top+panel.scrollTop+12)));
   const observer=new ResizeObserver(measure);
@@ -169,8 +221,8 @@ export default function Page(){
     {(item.id==="wegovy"||item.id==="wegovy-hd")&&<div className="wegovy-variants" role="group" aria-label="Wegovy presentation">{["wegovy","wegovy-hd"].map(id=><button key={id} type="button" aria-pressed={selected===id} onClick={()=>choose(id)}>{id==="wegovy"?"Wegovy":"Wegovy HD"}</button>)}</div>}
     <h2>{item.name}</h2><div className="molecule">{item.molecule}</div><div className="thin-rule"/>
     <div className="fact-row"><span>FORMAT</span><strong>{item.form}</strong></div><div className="fact-row"><span>FDA APPROVAL</span><strong>{item.approved}</strong></div>
-    <div className="dose-head"><span>DOSE OPTIONS</span><span>{item.id === "zepbound" ? "VIAL SELF-PAY PRICE" : "CURRENT SELF-PAY PRICE"}</span></div><div className="dose-grid">{item.doses.map(n=>{const dosePrice=getExplorePrice(item.name,n,item.model==="vial"?"Vial":item.model==="bottle"?"Tablet":"Pen");return <button key={n} className={dose===n?"selected":""} style={{"--dose-accent":productDoseColor(item.id,n,item.accent)} as React.CSSProperties} onClick={()=>setDose(n)} aria-pressed={dose===n} aria-label={`${n} mg, current snapshot ${dosePrice?.headline??"price unavailable"}`}><span className="dose-value">{n}<small>mg</small></span><span className="dose-price">{dosePrice?.headline??"—"}</span></button>})}</div>
-    {displayedPrice && <div className="price-module dose-price-chart"><div className="price-title"><span>{item.name.toUpperCase()} · {dose} MG{item.id === "zepbound" ? " VIAL" : ""} · PRICE HISTORY</span><strong>{displayedPrice.headline}<small> / {displayedPrice.periodDays} days</small></strong></div><button type="button" className="expand-chart-button" onClick={()=>setChartExpanded(true)} aria-label="Expand price chart"><Expand size={15}/> Expand chart</button><ExplorePriceLineChart chartSeries={displayedPrice.chartSeries} color={selectedAccent}/><p>{item.id==="foundayo"&&<>The chart shows available and observed prices and offers; non-price announcements are omitted. Hover over a point for its date and price basis. </>}{displayedPrice.detail}</p><div className="price-sources"><a href={displayedPrice.source} target="_blank" rel="noreferrer">Price source ↗</a>{displayedPrice.offerSources.map(offer=><a key={offer.label} href={offer.source} target="_blank" rel="noreferrer">{offer.label}</a>)}</div></div>}
+    <div className="dose-head"><span>DOSE OPTIONS</span><span>{item.id === "zepbound" ? "VIAL SELF-PAY · USD / 28 DAYS" : `SELF-PAY · USD / ${item.model==="bottle"?30:28} DAYS`}</span></div><div className="dose-grid">{item.doses.map(n=>{const dosePrice=getExplorePrice(item.name,n,item.model==="vial"?"Vial":item.model==="bottle"?"Tablet":"Pen");return <button key={n} className={dose===n?"selected":""} style={{"--dose-accent":productDoseColor(item.id,n,item.accent)} as React.CSSProperties} onClick={()=>setDose(n)} aria-pressed={dose===n} aria-label={`${n} mg, current snapshot ${dosePrice?.headline??"price unavailable"}${item.id==="zepbound"&&dosePrice?.conditionalOffer?` regular; $${dosePrice.conditionalOffer.usd} conditional; refill within 45 days of prior delivery`:""}`}><span className="dose-value">{n}<small>mg</small></span><span className="dose-price">{dosePrice?.headline??"—"}{item.id==="zepbound"&&dosePrice?.conditionalOffer?" regular":""}</span>{item.id==="zepbound"&&dosePrice?.conditionalOffer&&<span className="dose-conditional">${dosePrice.conditionalOffer.usd} conditional</span>}</button>})}</div>
+    {displayedPrice && <div className="price-module dose-price-chart"><div className="price-title"><span>{item.name.toUpperCase()} · {dose} MG · {priceDevice.toUpperCase()} · PRICE HISTORY</span><strong>{displayedPrice.headline}<small> USD / {displayedPrice.periodDays}-day supply</small></strong></div><button type="button" className="expand-chart-button" onClick={()=>setChartExpanded(true)} aria-label="Expand price chart"><Expand size={15}/> Expand chart</button><PriceHistoryContent price={displayedPrice} productId={item.id} dose={dose||item.doses[item.doses.length-1]} device={priceDevice} color={selectedAccent}/></div>}
     <p className="item-note">{item.note}</p>
     <a className="source-link" href={item.source} target="_blank" rel="noreferrer">{item.sourceName} <ArrowUpRight size={15}/></a>
    </aside>
@@ -202,6 +254,6 @@ export default function Page(){
   </section>
   <div className="page-caveat-section"><PolicyCaveat /></div>
   <footer className="site-footer"><span>RESEARCH & DESIGN · ARACELI VARGAS</span><span>PRODUCT INFORMATION ONLY · NOT MEDICAL ADVICE</span></footer>
-  {chartExpanded&&displayedPrice&&<dialog ref={expandedDialogRef} className="chart-modal-backdrop" onCancel={()=>setChartExpanded(false)} onKeyDown={event=>{if(event.key==="Escape")setChartExpanded(false)}} onClose={()=>setChartExpanded(false)} onClick={event=>{if(event.target===event.currentTarget)setChartExpanded(false)}}><section className="chart-modal" role="dialog" aria-modal="true" aria-labelledby="expanded-chart-title" onClick={event=>event.stopPropagation()}><div className="chart-modal-heading"><div><span className="panel-kicker">PRICE HISTORY · {item.name.toUpperCase()} · {dose} MG</span><h2 id="expanded-chart-title">{displayedPrice.headline}<small> / {displayedPrice.periodDays} days</small></h2></div><button type="button" onClick={()=>setChartExpanded(false)} aria-label="Close expanded chart"><X size={20}/></button></div><ExplorePriceLineChart chartSeries={displayedPrice.chartSeries} color={selectedAccent} expanded/><p>{item.id==="foundayo"&&<>The chart shows available and observed prices and offers; non-price announcements are omitted. Hover over a point for its date and price basis. </>}{displayedPrice.detail}</p><div className="price-sources"><a href={displayedPrice.source} target="_blank" rel="noreferrer">Price source ↗</a>{displayedPrice.offerSources.map(offer=><a key={offer.label} href={offer.source} target="_blank" rel="noreferrer">{offer.label}</a>)}</div></section></dialog>}
+  {chartExpanded&&displayedPrice&&<dialog ref={expandedDialogRef} className="chart-modal-backdrop" onCancel={()=>setChartExpanded(false)} onKeyDown={event=>{if(event.key==="Escape")setChartExpanded(false)}} onClose={()=>setChartExpanded(false)} onClick={event=>{if(event.target===event.currentTarget)setChartExpanded(false)}}><section className="chart-modal" role="dialog" aria-modal="true" aria-labelledby="expanded-chart-title" onClick={event=>event.stopPropagation()}><div className="chart-modal-heading"><div><span className="panel-kicker">PRICE HISTORY · {item.name.toUpperCase()} · {dose} MG · {priceDevice.toUpperCase()}</span><h2 id="expanded-chart-title">{displayedPrice.headline}<small> USD / {displayedPrice.periodDays}-day supply</small></h2></div><button type="button" onClick={()=>setChartExpanded(false)} aria-label="Close expanded chart"><X size={20}/></button></div><PriceHistoryContent price={displayedPrice} productId={item.id} dose={dose||item.doses[item.doses.length-1]} device={priceDevice} color={selectedAccent} expanded/></section></dialog>}
  </div>
 }

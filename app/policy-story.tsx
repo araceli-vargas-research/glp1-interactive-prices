@@ -7,6 +7,7 @@ import PriceSignal from "./price-signal";
 
 import {
   getStorySeries,
+  getCurrentStoryPrice,
   PRICE_OBSERVED_ON,
   pricePoints,
   recordEvents,
@@ -23,7 +24,7 @@ const stats = [
 
   { label: "FURTHER CUTS · NOV–DEC 2025", value: "14 days", tone: "gold", copy: "Following the November agreements, Wegovy fell another 30.1%; Zepbound’s 2.5 and 5 mg vial prices fell 14.3% and 20.0%. The two price actions were 14 days apart: November 17 for Wegovy and December 1 for Zepbound." },
 
-  { label: "THESE THREE SERIES HELD", value: "0%", tone: "blue", copy: "No additional reduction recorded for Wegovy injection and Zepbound 2.5 and 5 mg vial regular self-pay prices from December 1, 2025 to October 5, 2026. Higher-dose vials are excluded." },
+  { label: "THESE THREE SERIES HELD", value: "0%", tone: "blue", copy: "No additional reduction recorded for Wegovy injection and Zepbound 2.5 and 5 mg vial regular self-pay prices from December 1, 2025 to November 8, 2026. Higher-dose vials are excluded." },
 
 ];
 
@@ -79,6 +80,11 @@ export function PriceAnalysis() {
   const endTime = Date.parse(`${PRICE_OBSERVED_ON}T00:00:00Z`);
   const x = (date: string) => inset.left + ((Date.parse(`${date}T00:00:00Z`) - startTime) / (endTime - startTime)) * (chartWidth - inset.left - inset.right);
   const y = (indexValue: number) => inset.top + ((105 - indexValue) / 60) * (chartHeight - inset.top - inset.bottom);
+  const indexedPoints = (item: AnalysisSeries) => {
+    const first = item.points[0];
+    const snapshot = first && getCurrentStoryPrice(first.product, first.dose, first.form);
+    return snapshot ? [...item.points, snapshot] : item.points;
+  };
   const indexedPath = (item: AnalysisSeries) => {
     if (!item.points.length) return "";
     const base = item.points[0].usd;
@@ -162,10 +168,10 @@ export function PriceAnalysis() {
               {[50, 60, 70, 80, 90, 100].map((tick) => <g key={tick}><line x1={inset.left} x2={chartWidth - inset.right} y1={y(tick)} y2={y(tick)} className="analysis-grid-line" /><text x={inset.left - 14} y={y(tick) + 4} textAnchor="end" className="analysis-axis-label">{tick}</text></g>)}
               <line x1={x("2025-11-06")} x2={x("2025-11-06")} y1={inset.top} y2={chartHeight - inset.bottom} className="analysis-policy-line" />
               <text x={x("2025-11-06")} y="68" textAnchor="middle" className="analysis-policy-label">NOV 6, 2025 · LILLY / NOVO MFN AGREEMENTS</text>
-              {series.map((item) => <g key={item.key}><path d={indexedPath(item)} fill="none" stroke={item.color} className="analysis-index-line" />{item.points[0]?.dateLabel && item.points[1] && <path d={`M ${x(item.points[0].date)} ${y(100)} H ${x(item.points[1].date)}`} fill="none" stroke="#f7f1e8" strokeWidth="4" strokeDasharray="5 4"/>}{item.points.map((point) => { const indexed = (point.usd / item.points[0].usd) * 100; return <g key={point.id} role="button" tabIndex={0} className="analysis-index-point" onMouseEnter={() => setSelectedIndexedPoint(point)} onFocus={() => setSelectedIndexedPoint(point)} onClick={() => setSelectedIndexedPoint(point)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedIndexedPoint(point); } }}><circle cx={x(point.date)} cy={y(indexed)} r="8" fill="#080b12" stroke={item.color} /><title>{item.label}: ${point.usd} ({indexed.toFixed(1)})</title></g>; })}</g>)}
-              {[{ date: "2024-08-01", label: "Aug ’24" }, { date: "2025-03-01", label: "Mar ’25" }, { date: "2025-11-01", label: "Nov ’25" }, { date: "2026-06-01", label: "Jun ’26" }, { date: "2026-10-01", label: "Oct ’26" }].map((tick) => <text key={tick.date} x={x(tick.date)} y={chartHeight - 17} textAnchor="middle" className="analysis-axis-label">{tick.label}</text>)}
+              {series.map((item) => <g key={item.key}><path d={indexedPath(item)} fill="none" stroke={item.color} className="analysis-index-line" />{item.points[0]?.dateLabel && item.points[1] && <path d={`M ${x(item.points[0].date)} ${y(100)} H ${x(item.points[1].date)}`} fill="none" stroke="#f7f1e8" strokeWidth="4" strokeDasharray="5 4"/>}{indexedPoints(item).map((point) => { const indexed = (point.usd / item.points[0].usd) * 100; return <g key={point.id} role="button" tabIndex={0} className="analysis-index-point" onMouseEnter={() => setSelectedIndexedPoint(point)} onFocus={() => setSelectedIndexedPoint(point)} onClick={() => setSelectedIndexedPoint(point)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedIndexedPoint(point); } }}><circle cx={x(point.date)} cy={y(indexed)} r="8" fill="#080b12" stroke={item.color} /><title>{`${item.label}: $${point.usd} (${indexed.toFixed(1)}) · ${point.date} · ${point.event}`}</title></g>; })}</g>)}
+              {[{ date: "2024-08-01", label: "Aug ’24" }, { date: "2025-03-01", label: "Mar ’25" }, { date: "2025-11-01", label: "Nov ’25" }, { date: "2026-06-01", label: "Jun ’26" }, { date: PRICE_OBSERVED_ON, label: "Nov ’26" }].map((tick) => <text key={tick.date} x={x(tick.date)} y={chartHeight - 17} textAnchor="middle" className="analysis-axis-label">{tick.label}</text>)}
             </svg>
-            <div className="analysis-line-legend">{series.map((item) => <span key={item.key}><i style={{ background: item.color }} />{item.label}</span>)}</div>
+            <p className="history-method">Prices verified November 8, 2026. No new November price change established.</p><div className="analysis-line-legend">{series.map((item) => <span key={item.key}><i style={{ background: item.color }} />{item.label}</span>)}</div>
             <p className="history-method">Baseline = 100. Wegovy’s dashed predecessor baseline has an unverified start date and a different retail channel. Percentage-point contributions in Cut decomposition use this initial-price denominator; summary percentages use the previous offer.</p><p className="indexed-readout">{selectedIndexedPoint ? <><strong>{selectedIndexedPoint.product} · {selectedIndexedPoint.dose}</strong> {priceEventLabel(selectedIndexedPoint)}: ${selectedIndexedPoint.usd} · {selectedIndexedPoint.event}</> : "Hover or focus a point to read the underlying price event."}</p>
           </div>
         )}
@@ -202,7 +208,7 @@ const timeline = [
 
   { label: "2025", title: "Direct cash channels bypass middlemen", note: "Direct cash channels and the companies’ direct-to-patient platforms bypassed traditional insurers and pharmacy benefit managers (PBMs), making it easier to offer lower prices directly to patients. Zepbound and Wegovy cut prices before the May 2025 MFN executive order.\n\nFollowing the November 6 manufacturer agreements, further cuts occurred on November 17 and December 1—two price actions 14 days apart.\n\nPolicy entered a market where cash prices were already falling; the timing alone does not establish what caused later reductions or periods without recorded changes." },
 
-  { label: "2026", title: "Selected prices held; other offers changed", note: "Wegovy injection and Zepbound 2.5 and 5 mg vial regular prices were unchanged at the October 5 observation relative to December 1, 2025. This does not cover all products or strengths.\n\nHigher-dose Zepbound vial regular prices were lower at the current observation: 7.5 mg $599 → $499; 12.5 mg $849 → $699; 15 mg $1,049 → $699. The exact change dates are not established in this record. New products and promotional offers are separate comparisons." },
+  { label: "2026", title: "Selected prices held; other offers changed", note: "Wegovy injection and Zepbound 2.5 and 5 mg vial regular prices were unchanged at the November 8 verification relative to December 1, 2025. This does not cover all products or strengths.\n\nHigher-dose Zepbound vial regular prices were lower at the current observation: 7.5 mg $599 → $499; 12.5 mg $849 → $699; 15 mg $1,049 → $699. The exact change dates are not established in this record. New products and promotional offers are separate comparisons." },
 
 ];
 
@@ -465,13 +471,13 @@ export default function PolicyStory({ productUniverse, approvedMarket, priceEvid
                 <button className="oped-chart-open" type="button" onClick={() => setExpandedChart("zepbound")} aria-label="Open Zepbound price channel chart at full size">
                   <Image unoptimized width={2718} height={1504} src="/charts/chart1_zepbound_channels.png" alt="Zepbound price history across pricing channels" loading="lazy" />
                 </button>
-                <figcaption>Zepbound’s direct-pay vial prices fell in two steps, while the pen list price stayed largely unchanged. Some lower prices depended on offer eligibility. Select the chart to view it at full size.</figcaption>
+                <figcaption><strong>Historical chart · last observation September 10, 2026.</strong> Zepbound’s direct-pay vial prices fell in two steps, while the pen list price stayed largely unchanged. Some lower prices depended on offer eligibility. Select the chart to view it at full size.</figcaption>
               </figure>
               <figure>
                 <button className="oped-chart-open" type="button" onClick={() => setExpandedChart("wegovy")} aria-label="Open Wegovy price channel chart at full size">
                   <Image unoptimized width={2626} height={1504} src="/charts/chart2_wegovy_channels.png" alt="Wegovy price history across pricing channels" loading="lazy" />
                 </button>
-                <figcaption>Wegovy’s injection cash price fell in two steps, from $650 to $499, then to $349, while its list price held at about $1,349. The announced 2027 list-price cut is shown separately. Select the chart to view it at full size.</figcaption>
+                <figcaption><strong>Historical chart · last observation September 10, 2026.</strong> Wegovy’s injection cash price fell in two steps, from $650 to $499, then to $349, while its list price held at about $1,349. The announced 2027 list-price cut is shown separately. Select the chart to view it at full size.</figcaption>
               </figure>
               </div>
           </div>

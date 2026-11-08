@@ -1106,3 +1106,12 @@
 .policy-story-page .history-scroll .history-axis-title { fill: #974311; font-weight: 700; }
 
 .policy-story-page .history-scroll .history-policy-label-may { fill: #b58b00; font-weight: 700; }
+
+.policy-story-page .history-scroll .history-event-date { fill: #202c3d; font-size: 12px; font-weight: 600; }
+
+/* Keep price/date callouts outside the plotted marks and policy markers. */
+.policy-story-page .history-price-callouts { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,180px),1fr)); gap: 12px; margin: 16px 0 24px; }
+.policy-story-page .history-price-callout { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 14px 16px; border: 1px solid #d8cec3; border-radius: 8px; background: #fffdf9; }
+.policy-story-page .history-price-callout > span { color: #475569; font-size: 12px; line-height: 1.5; font-weight: 600; }
+.policy-story-page .history-price-callout > strong { color: #202c3d; font-size: 24px; line-height: 1.2; }
+.policy-story-page .history-price-callout > small { color: #974311; font-size: 12px; line-height: 1.5; }

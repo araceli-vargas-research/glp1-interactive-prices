@@ -36,13 +36,20 @@ export default function PriceHistoryPanels() {
       }}>{product === "wegovy" ? "Wegovy" : "Zepbound"}</button>)}
     </div>
     {brand === "zepbound" && <div className="history-dose-picker" role="group" aria-label="Choose Zepbound vial strength">{["2.5", "5"].map(dose => <button key={dose} type="button" aria-pressed={zepboundDose === dose} onClick={() => { setZepboundDose(dose); setSelected(null); }}>{dose} mg vial</button>)}</div>}
-    <div className="history-policy-key"><span>12 MAY 2025 · MFN EXECUTIVE ORDER</span><span>6 NOV 2025 · LILLY / NOVO AGREEMENTS ANNOUNCED</span></div>
+    <p className="history-method">Prices verified November 8, 2026. No new November price change established.</p><div className="history-policy-key"><span>12 MAY 2025 · MFN EXECUTIVE ORDER</span><span>6 NOV 2025 · LILLY / NOVO AGREEMENTS ANNOUNCED</span></div>
     {selectedPriceSeries.filter(series => series.key === activeKey).map(series => {
       const points = getStorySeries(series.product, series.dose, series.form).filter(p => p.priceBasis === "regular" && p.displayMode !== "marker").filter((p, i, all) => i === 0 || p.usd !== all[i - 1].usd);
       const snapshot = getCurrentStoryPrice(series.product, series.dose, series.form);
       const path = points.map((p, i) => `${i ? "H" : "M"} ${x(p.date)} ${i ? `V ${y(p.usd)}` : y(p.usd)}`).join(" ") + (snapshot && points.at(-1)?.usd === snapshot.usd ? ` H ${x(snapshot.date)}` : "");
       return <section key={series.key} id="history-active-panel" role="tabpanel" aria-labelledby={`history-tab-${brand}`} className="history-panel">
         <h4>{series.label}</h4>
+        <div className="history-price-callouts" aria-label="Dated price offers">
+          {points.map((point,index)=><div key={point.id} className="history-price-callout">
+            <span>{point.dateLabel ? "Prior retail savings offer" : new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${point.date}T00:00:00Z`))}</span>
+            <strong>${point.usd}</strong>
+            <small>{point.dateLabel ? "Start date unverified · different channel" : index>0 ? `−${((points[index-1].usd-point.usd)/points[index-1].usd*100).toFixed(1)}%${points[index-1].dateLabel ? " · different channels" : ""}` : point.channel}</small>
+          </div>)}
+        </div>
         <div className="history-scroll"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${series.label}: dated regular self-pay prices in dollars per 28-day supply`}>
           {[0, 200, 400, 600].map(tick => <g key={tick}><line x1="110" x2="850" y1={y(tick)} y2={y(tick)} className="history-grid"/><text x="88" y={y(tick)+4} textAnchor="end">${tick}</text></g>)}
           <text x="14" y="28" className="history-axis-title">USD / 28 DAYS</text>
@@ -50,17 +57,15 @@ export default function PriceHistoryPanels() {
           {[{ date: "2025-05-12", label: "MAY 12" }, { date: "2025-11-06", label: "NOV 6" }].map(marker => <g key={marker.date}><line x1={x(marker.date)} x2={x(marker.date)} y1="42" y2="218" className="history-policy"/><text x={x(marker.date)} y="28" textAnchor="middle" className={marker.date === "2025-05-12" ? "history-policy-label-may" : undefined}>{marker.label}</text></g>)}
           <path d={path} fill="none" stroke={series.color} strokeWidth="3"/>
           {points[0]?.dateLabel && points[1] && <path d={`M ${x(points[0].date)} ${y(points[0].usd)} H ${x(points[1].date)}`} stroke="#f7f1e8" strokeWidth="4" strokeDasharray="5 4"/>}
-          {points.map((p, i) => <g key={p.id} role="button" tabIndex={0} aria-label={`${priceEventLabel(p)}, $${p.usd}; ${p.event}`} onMouseEnter={() => setSelected(p)} onFocus={() => setSelected(p)} onClick={() => setSelected(p)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(p); } }} className="history-point">
+          {points.map((p) => <g key={p.id} role="button" tabIndex={0} aria-label={`${priceEventLabel(p)}, $${p.usd}; ${p.event}`} onMouseEnter={() => setSelected(p)} onFocus={() => setSelected(p)} onClick={() => setSelected(p)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(p); } }} className="history-point">
             <circle cx={x(p.date)} cy={y(p.usd)} r="7" fill="#f7f1e8" stroke={series.color} strokeWidth="3"/>
-            <text x={x(p.date)} y={y(p.usd)-18} textAnchor="middle" className="history-price" style={series.product === "Wegovy" && (p.usd === 499 || p.usd === 349) ? { transform: "translate(19px, -2px)" } : undefined}>${p.usd}</text>
-            {i > 0 && <text x={x(p.date)+12} y={y(p.usd)+25} className="history-cut">−{((points[i-1].usd-p.usd)/points[i-1].usd*100).toFixed(1)}%</text>}
-            
           </g>)}
-          {[{ date: "2024-08-01", label: "AUG 2024" }, { date: "2025-03-01", label: "MAR 2025" }, { date: "2025-11-01", label: "NOV 2025" }, { date: PRICE_OBSERVED_ON, label: "OCT 5, 2026" }].map(tick => <text key={tick.date} x={x(tick.date)} y="255" textAnchor="middle">{tick.label}</text>)}
+          {snapshot && <g className="history-point" role="button" tabIndex={0} aria-label={`${priceEventLabel(snapshot)}, $${snapshot.usd}; ${snapshot.event}`} onMouseEnter={()=>setSelected(snapshot)} onFocus={()=>setSelected(snapshot)} onClick={()=>setSelected(snapshot)}><circle cx={x(snapshot.date)} cy={y(snapshot.usd)} r="7" fill="#f7f1e8" stroke={series.color} strokeWidth="3"/><title>{`${snapshot.date} · $${snapshot.usd} · ${snapshot.event}`}</title></g>}
+          {[{ date: "2024-08-01", label: "AUG 2024" }, { date: "2025-03-01", label: "MAR 2025" }, { date: "2025-11-01", label: "NOV 2025" }, { date: PRICE_OBSERVED_ON, label: "NOV 8, 2026" }].map(tick => <text key={tick.date} x={x(tick.date)} y="255" textAnchor="middle">{tick.label}</text>)}
         </svg></div>
       </section>;
     })}
-    <p className="history-method">USD per 28-day supply. Reductions are percentages of the previous regular offer. Wegovy’s $650 predecessor was a retail savings offer; its start date is unverified, so the dashed baseline is schematic. Lines carry recorded levels between events and end at the October 5, 2026 observation; they do not establish continuous daily availability or causation.</p>
+    <p className="history-method">USD per 28-day supply. Reductions are percentages of the previous regular offer. Dotted $650 segment: Prior retail savings offer; start date unverified. Different channel from NovoCare’s March launch. The −23.2% comparison spans these different channels. Lines carry recorded levels between events and end at the November 8, 2026 observation; they do not establish continuous daily availability. Policy markers show timing, not evidence of causation.</p>
     <div className="history-readout" aria-live="polite">{selected ? <><strong>{selected.product} · {selected.dose} · ${selected.usd}</strong><span>{priceEventLabel(selected)} · {selected.channel} · {selected.event}</span><span>{selected.eligibility}</span><a href={selected.sourceUrl} target="_blank" rel="noreferrer">Manufacturer source ↗</a></> : "Hover, select, or keyboard-focus a price point for its offer and manufacturer source."}</div>
   </div>;
 }

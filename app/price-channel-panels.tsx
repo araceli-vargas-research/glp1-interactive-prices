@@ -16,7 +16,7 @@ export default function PriceChannelPanels({ product }: { product: "zepbound" | 
   const y = (usd: number) => 140 - usd/max*90;
   return <div className="channel-panels">
     <h3>{name} · manufacturer self-pay offers</h3>
-    <p>Observation cutoff: October 5, 2026. Dashed baselines have uncertain start dates. Unconnected diamonds are snapshots; a lower snapshot does not locate the price-change date.</p>
+    <p>Prices verified November 8, 2026. No new November price change established. Dashed baselines have uncertain start dates. Unconnected diamonds are snapshots; a lower snapshot does not locate the price-change date.</p>
     {rows.map(row => {
       const points = pricePoints.filter(p => p.product === name && p.form === (product === "zepbound" ? "Vial" : "Pen") && p.dose === row.dose && p.priceBasis === row.basis && p.status !== "announced")
         .filter((p,i,all) => all.findIndex(q => q.id === p.id) === i).sort((a,b) => a.date.localeCompare(b.date));
@@ -32,7 +32,7 @@ export default function PriceChannelPanels({ product }: { product: "zepbound" | 
           {p.status === "observed" ? <path d={`M ${x(p.date)} ${y(p.usd)-7} l 7 7 l -7 7 l -7 -7 Z`} fill="#f7f1e8" stroke={color} strokeWidth="2"/> : <circle cx={x(p.date)} cy={y(p.usd)} r="6" fill="#f7f1e8" stroke={color} strokeWidth="2"/>}
           <text x={x(p.date)} y={y(p.usd)-15} textAnchor="middle" className="history-price">${p.usd}</text>
         </g>)}
-        {[{ date: "2024-08-01", label: "AUG 2024" }, { date: "2025-03-01", label: "MAR 2025" }, { date: "2025-11-01", label: "NOV 2025" }, { date: PRICE_OBSERVED_ON, label: "OCT 5, 2026" }].map(tick => <text key={tick.date} x={x(tick.date)} y="178" textAnchor="middle">{tick.label}</text>)}
+        {[{ date: "2024-08-01", label: "AUG 2024" }, { date: "2025-03-01", label: "MAR 2025" }, { date: "2025-11-01", label: "NOV 2025" }, { date: PRICE_OBSERVED_ON, label: "NOV 8, 2026" }].map(tick => <text key={tick.date} x={x(tick.date)} y="178" textAnchor="middle">{tick.label}</text>)}
       </svg></div></section>;
     })}
     <div className="history-readout" aria-live="polite">{selected ? <><strong>{name} · {selected.dose} · ${selected.usd} / {selected.periodDays} days</strong><span>{priceEventLabel(selected)} · {selected.priceBasis} · {selected.event}</span><span>{selected.eligibility}</span>{selected.note && <span>{selected.note}</span>}<a href={selected.sourceUrl} target="_blank" rel="noreferrer">Manufacturer source ↗</a></> : "Select a point to see its date, eligibility, price basis, and manufacturer source. List prices and government benchmarks are outside these self-pay histories."}</div>

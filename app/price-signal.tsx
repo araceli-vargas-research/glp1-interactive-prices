@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getCurrentStoryPrice, getStorySeries, policyEvents, pricePoints, PRICE_OBSERVED_ON, type PricePoint } from "../data/glp1-prices";
+import { currentPrices, PRICE_VERIFICATION_LABEL, getCurrentStoryPrice, getStorySeries, policyEvents, PRICE_OBSERVED_ON, type PricePoint } from "../data/glp1-prices";
 
 type ProductOption = {
   name: string;
@@ -88,7 +88,7 @@ function PriceHistoryChart({ points, snapshot }: { points: PricePoint[]; snapsho
 
     { date: "2025-11-06", label: "Nov ’25" },
 
-    { date: "2026-10-05", label: "Oct ’26" },
+    { date: PRICE_OBSERVED_ON, label: "Nov ’26" },
 
   ];
 
@@ -103,7 +103,7 @@ function PriceHistoryChart({ points, snapshot }: { points: PricePoint[]; snapsho
         {[0, 1, 2, 3, 4].map((row) => { const value = max - ((max - min) * row) / 4; return <g key={row} className="policy-chart-grid"><line x1={inset.left} y1={y(value)} x2={width - inset.right} y2={y(value)} /><text x={inset.left - 9} y={y(value) + 4} textAnchor="end">${Math.round(value)}</text></g>; })}
 
         {["regular", "conditional", "temporary"].map(basis => {
-          const seriesPoints = points.filter(point => point.status !== "announced" && point.priceBasis === basis).sort((a, b) => a.date.localeCompare(b.date));
+          const seriesPoints = points.filter(point => point.status === "available" && point.priceBasis === basis).sort((a, b) => a.date.localeCompare(b.date));
           if (!seriesPoints.length) return null;
           let path = `M ${x(Date.parse(`${seriesPoints[0].date}T00:00:00Z`))} ${y(seriesPoints[0].usd)}`;
           for (const point of seriesPoints.slice(1)) path += ` H ${x(Date.parse(`${point.date}T00:00:00Z`))} V ${y(point.usd)}`;
@@ -121,7 +121,7 @@ function PriceHistoryChart({ points, snapshot }: { points: PricePoint[]; snapsho
         {activePoint && (() => {
           const tipX = Math.max(inset.left, Math.min(x(Date.parse(`${activePoint.date}T00:00:00Z`)) - 100, width - 210));
           const tipY = Math.min(y(activePoint.usd) + 12, height - inset.bottom - 50);
-          const date = activePoint.dateLabel ? "Prior offer · date unverified" : new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${activePoint.date}T00:00:00Z`));
+          const date = activePoint.dateLabel ? "Prior offer · date unverified" : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${activePoint.date}T00:00:00Z`));
           return <g className="history-point-tooltip" role="status" transform={`translate(${tipX}, ${tipY})`}>
             <rect width="200" height="46" rx="5" fill="#22264e" stroke="#6f789b" />
             <text x="8" y="17">{date}: ${activePoint.usd}</text>
@@ -154,11 +154,10 @@ export default function PriceSignal() {
 
   const snapshot = getCurrentStoryPrice(selectedProduct.product, selectedProduct.dose, selectedProduct.form);
 
-  const selectedOffers = pricePoints
+  const selectedOffers = currentPrices
     .filter((point) => point.product === selectedProduct.product && point.form === selectedProduct.form)
     .filter((point) => point.dose === `${selectedProduct.dose} mg` || point.dose === "All doses")
-    .filter((point) => point.status === "available" && point.priceBasis !== "regular")
-    .filter((point, index, all) => all.findIndex((candidate) => candidate.date === point.date && candidate.usd === point.usd && candidate.priceBasis === point.priceBasis && candidate.eligibility === point.eligibility) === index)
+    .filter((point) => point.priceBasis !== "regular")
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const selectedFamily = productFamilies.find((family) => family.id === selectedFamilyId) ?? productFamilies[0];
@@ -240,7 +239,7 @@ export default function PriceSignal() {
 
               <div className="price-chart">
 
-                <PriceHistoryChart key={`${selectedProduct.product}-${selectedProduct.form}-${selectedProduct.dose}`} points={history} snapshot={snapshot} />
+                <PriceHistoryChart key={`${selectedProduct.product}-${selectedProduct.form}-${selectedProduct.dose}`} points={snapshot ? [...history, snapshot] : history} snapshot={snapshot} />
 
               </div>
 
@@ -248,7 +247,7 @@ export default function PriceSignal() {
 
               <div className="chart-note">
 
-                {snapshot ? <>Current observed snapshot: ${snapshot.usd} per {snapshot.periodDays} days ({snapshot.form}, {snapshot.dose}); observed on {snapshot.date}. This snapshot is not treated as a dated price change. <a href={snapshot.sourceUrl} target="_blank" rel="noreferrer">Snapshot source ↗</a></> : "No current observed snapshot is included for this product and dose."} {history[0] && <>Historical dots show sourced available regular offers only. {history.some(point => point.dateLabel) && <>The $650 predecessor start date is unverified; its plotted baseline is schematic. </>} <a href={history[history.length - 1].sourceUrl} target="_blank" rel="noreferrer">Latest historical source ↗</a></>}
+                {snapshot ? <>{PRICE_VERIFICATION_LABEL}: ${snapshot.usd} per {snapshot.periodDays} days ({snapshot.form}, {snapshot.dose}); observed on {snapshot.date}. This snapshot is not treated as a dated price change. <a href={snapshot.sourceUrl} target="_blank" rel="noreferrer">Snapshot source ↗</a></> : "No current observed snapshot is included for this product and dose."} {history[0] && <>Historical dots show dated regular offers; the latest snapshot is separately labelled. {history.some(point => point.dateLabel) && <>The $650 predecessor start date is unverified; its plotted baseline is schematic. </>} <a href={history[history.length - 1].sourceUrl} target="_blank" rel="noreferrer">Latest historical source ↗</a></>}
 
               </div>
 
@@ -261,7 +260,7 @@ export default function PriceSignal() {
                         <strong>${offer.usd}</strong>
                         <span>{offer.priceBasis} · {new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${offer.date}T00:00:00Z`))}</span>
                         <p>{offer.eligibility}</p>
-                        {offer.effectiveUntil && <em>Offer recorded through {offer.effectiveUntil}</em>}
+                        {offer.effectiveUntil && <em>Offer expires {offer.effectiveUntil}</em>}
                       </article>
                     ))}
                   </div>
