@@ -1,6 +1,8 @@
-# GLP-1 Universe
+# Interactive GLP-1 Drug Price Explorer
 
-A Consumer Choice Center research project combining an op-ed, sourced manufacturer cash-price histories, policy timelines, and an interactive product universe. Regular prices are distinguished from conditional, introductory, and temporary offers.
+A Consumer Choice Center research project combining an op-ed, sourced manufacturer cash-price histories, policy timelines, and an interactive product universe. 
+
+It's an interactive GLP-1 drug pricing explorer tracking historical prices, manufacturer offers, market competition, and policy developments. Visualizing the economics of weight-loss medications and what they mean for affordability and consumer choice. Regular prices are distinguished from conditional, introductory, and temporary offers.
 
 ## Tech stack
 
